@@ -537,112 +537,129 @@
         <div class="footer">© 2025 Takealot.com · All rights reserved</div>
     </div>
 
-    <script>
-        // ─── ORDER NUMBER ───────────────────────────────────────────────────────────
-        const orderNum = Math.floor(100000 + Math.random() * 900000);
-        document.querySelector('#orderNum span').textContent = orderNum;
+<script>
+    // ─── ORDER NUMBER ───────────────────────────────────────────────────────────
+    const orderNum = Math.floor(100000 + Math.random() * 900000);
+    document.querySelector('#orderNum span').textContent = orderNum;
 
-        // ─── REAL COUNTDOWN ─────────────────────────────────────────────────────────
-        // Fixed delivery date: 25 February 2026
-        const DELIVERY_DATE = new Date('2026-02-25T23:59:59');
-        const ORDER_DATE = new Date('2026-02-18T00:00:00'); // order placed date
-        const DELIVERY_MS = DELIVERY_DATE - ORDER_DATE;    // total delivery window
+    // ─── DATES DYNAMIC ON FIRST VISIT ───────────────────────────────────────────
+    const STORAGE_KEY = 'takealot_fake_order_dates';
 
-        // Show ETA date
-        const etaOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        document.getElementById('etaDate').textContent = DELIVERY_DATE.toLocaleDateString('en-ZA', etaOptions);
+    let savedDates = JSON.parse(localStorage.getItem(STORAGE_KEY));
 
-        function pad(n) { return String(n).padStart(2, '0'); }
+    if (!savedDates) {
+        const orderDate = new Date(); // primeira abertura
+        const deliveryDate = new Date(orderDate.getTime() + (6 * 24 * 60 * 60 * 1000)); // +6 dias
 
-        function updateCountdown() {
-            const now = new Date();
-            const diff = DELIVERY_DATE - now;
+        savedDates = {
+            orderDate: orderDate.toISOString(),
+            deliveryDate: deliveryDate.toISOString()
+        };
 
-            if (diff <= 0) {
-                // Delivered!
-                document.getElementById('cdDays').textContent = '00';
-                document.getElementById('cdHours').textContent = '00';
-                document.getElementById('cdMins').textContent = '00';
-                document.getElementById('cdSecs').textContent = '00';
-                document.querySelectorAll('.countdown-box').forEach(b => b.classList.add('done'));
-                document.getElementById('countdownLabel').textContent = '🎉 Your order has been delivered!';
-                return;
-            }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedDates));
+    }
 
-            const totalSecs = Math.floor(diff / 1000);
-            const days = Math.floor(totalSecs / 86400);
-            const hours = Math.floor((totalSecs % 86400) / 3600);
-            const mins = Math.floor((totalSecs % 3600) / 60);
-            const secs = totalSecs % 60;
+    const ORDER_DATE = new Date(savedDates.orderDate);
+    const DELIVERY_DATE = new Date(savedDates.deliveryDate);
+    const DELIVERY_MS = DELIVERY_DATE - ORDER_DATE;
 
-            document.getElementById('cdDays').textContent = pad(days);
-            document.getElementById('cdHours').textContent = pad(hours);
-            document.getElementById('cdMins').textContent = pad(mins);
-            document.getElementById('cdSecs').textContent = pad(secs);
+    // Show ETA date
+    const etaOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    document.getElementById('etaDate').textContent =
+        DELIVERY_DATE.toLocaleDateString('en-ZA', etaOptions);
+
+    function pad(n) {
+        return String(n).padStart(2, '0');
+    }
+
+    // ─── COUNTDOWN ───────────────────────────────────────────────────────────────
+    function updateCountdown() {
+        const now = new Date();
+        const diff = DELIVERY_DATE - now;
+
+        if (diff <= 0) {
+            document.getElementById('cdDays').textContent = '00';
+            document.getElementById('cdHours').textContent = '00';
+            document.getElementById('cdMins').textContent = '00';
+            document.getElementById('cdSecs').textContent = '00';
+            document.querySelectorAll('.countdown-box').forEach(b => b.classList.add('done'));
+            document.getElementById('countdownLabel').textContent = '🎉 Your order has been delivered!';
+            return;
         }
 
-        setInterval(updateCountdown, 1000);
-        updateCountdown();
+        const totalSecs = Math.floor(diff / 1000);
+        const days = Math.floor(totalSecs / 86400);
+        const hours = Math.floor((totalSecs % 86400) / 3600);
+        const mins = Math.floor((totalSecs % 3600) / 60);
+        const secs = totalSecs % 60;
 
-        // ─── STATUS STEPS ───────────────────────────────────────────────────────────
-        // Calculate which step we're on based on elapsed time
-        function updateSteps() {
-            const now = new Date();
-            const elapsed = now - ORDER_DATE; // ms elapsed since order
-            const totalMs = DELIVERY_MS;
+        document.getElementById('cdDays').textContent = pad(days);
+        document.getElementById('cdHours').textContent = pad(hours);
+        document.getElementById('cdMins').textContent = pad(mins);
+        document.getElementById('cdSecs').textContent = pad(secs);
+    }
 
-            // Step thresholds (as fraction of total delivery time)
-            // Step 1: Order Confirmed  → immediate
-            // Step 2: Processing       → after 5% of time
-            // Step 3: Dispatched       → after 20% of time
-            // Step 4: In Transit       → after 35% of time
-            // Step 5: Out for Delivery → after 85% of time
-            // Step 6: Delivered        → after 100% of time
+    setInterval(updateCountdown, 1000);
+    updateCountdown();
 
-            const pct = elapsed / totalMs;
+    // ─── STATUS STEPS ────────────────────────────────────────────────────────────
+    function updateSteps() {
+        const now = new Date();
+        const elapsed = now - ORDER_DATE;
+        const totalMs = DELIVERY_MS;
 
-            const steps = [
-                { id: 'step1', threshold: 0 },
-                { id: 'step2', threshold: 0.05 },
-                { id: 'step3', threshold: 0.20 },
-                { id: 'step4', threshold: 0.35 },
-                { id: 'step5', threshold: 0.85 },
-                { id: 'step6', threshold: 1.00 },
-            ];
+        let pct = elapsed / totalMs;
 
-            let activeIndex = -1;
-            for (let i = 0; i < steps.length; i++) {
-                if (pct >= steps[i].threshold) activeIndex = i;
+        // limita entre 0 e 1
+        if (pct < 0) pct = 0;
+        if (pct > 1) pct = 1;
+
+        const steps = [
+            { id: 'step1', threshold: 0.00, icon: '✓' },
+            { id: 'step2', threshold: 0.05, icon: '✓' },
+            { id: 'step3', threshold: 0.20, icon: '→' },
+            { id: 'step4', threshold: 0.35, icon: '🚚' },
+            { id: 'step5', threshold: 0.85, icon: '🏠' },
+            { id: 'step6', threshold: 1.00, icon: '🎉' }
+        ];
+
+        let activeIndex = 0;
+        for (let i = 0; i < steps.length; i++) {
+            if (pct >= steps[i].threshold) {
+                activeIndex = i;
             }
-
-            steps.forEach((s, i) => {
-                const el = document.getElementById(s.id);
-                el.classList.remove('done', 'active', 'pending');
-                if (i < activeIndex) {
-                    el.classList.add('done');
-                    el.querySelector('.step-dot').textContent = '✓';
-                } else if (i === activeIndex) {
-                    el.classList.add('active');
-                } else {
-                    el.classList.add('pending');
-                    el.querySelector('.step-dot').textContent = '○';
-                }
-            });
         }
 
-        updateSteps();
-        setInterval(updateSteps, 60000); // update steps every minute
+        steps.forEach((s, i) => {
+            const el = document.getElementById(s.id);
+            const dot = el.querySelector('.step-dot');
 
-        // ─── COMPLAINT FORM ─────────────────────────────────────────────────────────
-        document.getElementById('complaintForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            // Hide form, show success
-            this.style.display = 'none';
-            document.getElementById('successMsg').classList.add('show');
-            // Scroll to success
-            document.getElementById('successMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.remove('done', 'active', 'pending');
+
+            if (i < activeIndex) {
+                el.classList.add('done');
+                dot.textContent = '✓';
+            } else if (i === activeIndex) {
+                el.classList.add('active');
+                dot.textContent = s.icon;
+            } else {
+                el.classList.add('pending');
+                dot.textContent = '○';
+            }
         });
-    </script>
+    }
+
+    updateSteps();
+    setInterval(updateSteps, 60000);
+
+    // ─── COMPLAINT FORM ──────────────────────────────────────────────────────────
+    document.getElementById('complaintForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        this.style.display = 'none';
+        document.getElementById('successMsg').classList.add('show');
+        document.getElementById('successMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+</script>
 </body>
 
 </html>
